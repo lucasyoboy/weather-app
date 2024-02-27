@@ -16,8 +16,8 @@
 #define SEALEVELPRESSURE_HPA (1013.25)
 
 // --------------------------------------------------------------------------
-const char* ssid = "LucasAsus";
-const char* password = "lucas123";
+const char* ssid = "Colegio";
+const char* password = "24031000";
 // --------------------------------------------------------------------------
 float GET_BATTERY_VOLTAGE() {
   float v_adc = ((float)analogRead(BATTERY_PIN) / 4095.0 * 3.3);
@@ -35,6 +35,48 @@ float GET_WINDSPEED() {
   float windspeed = analogRead(WINDSPEED_PIN) * WINDSPEED_CONSTANT / 1000;
   return windspeed;
 }
+
+template <size_t n> void push(int (&arr)[n], int const value) {
+  static size_t index = 0;
+
+  arr[index] = value;
+  index = (index + 1) % n;
+}
+
+template <size_t n> int pop(int (&arr)[n]) {
+  static size_t index = 0;
+
+  int result = arr[index];
+  index = (index + 1) % n;
+  return result;
+}
+
+template <size_t n> void roll(int (&arr)[n]) {
+  static size_t index = 0;
+
+  for (size_t i = 0; i < n; i++) {
+    Serial.print(arr[(index + i) % n]);
+    Serial.print(' ');
+  }
+  Serial.println();
+
+  index = (index + 1) % n;
+}
+
+template <size_t n> int maximum(int const (&arr)[n]) {
+  return maximum_(arr, n);
+}
+
+int maximum_(int const arr[], size_t const n) {
+  // Note that `arr` needs to have at least one element.
+  int max_ {arr[0]};
+  for (size_t i {1}; i < n; ++i) {
+    if (arr[i] > max_) {
+      max_ = arr[i];
+    }
+  }
+  return max_;
+}
 // --------------------------------------------------------------------------
 
 Adafruit_BME280 bme;
@@ -43,9 +85,9 @@ void setup() {
   Serial.begin(115200);
   delay(2000);  //Delay needed before calling the WiFi.begin
 
-  IPAddress local_IP(192, 168, 137, 5);  // Your Desired Static IP Address
+  IPAddress local_IP(192, 168, 41, 188); // Your Desired Static IP Address
   IPAddress subnet(255, 255, 255, 0);
-  IPAddress gateway(192, 168, 137, 1);
+  IPAddress gateway(192, 168, 41, 1);
 
   WiFi.begin(ssid, password);
 
@@ -61,13 +103,20 @@ void setup() {
   status = bme.begin(0x76);
 }
 
-void loop(){
+void loop() {
+  int val[60];
   // POST
   HTTPClient http;
   int httpResponseCode;
   http.setReuse(false);
+
+  for (int i = 0; i < 60; i++) {
+    push(val, GET_WINDSPEED());
+    delay(1000);
+  }
+
   do {
-    http.begin("http://192.168.137.1:80/post");
+    http.begin("http://192.168.41.199:80/post");
     http.addHeader("Content-Type", "application/json");
 
     DynamicJsonDocument doc(2048);
@@ -75,7 +124,7 @@ void loop(){
     doc["humidity"] = bme.readHumidity();
     doc["pressure"] = bme.readPressure() / 100.0F;
     doc["altitude"] = bme.readAltitude(SEALEVELPRESSURE_HPA);
-    doc["windspeed"] = GET_WINDSPEED();
+    doc["windspeed"] = maximum(val);
     doc["battery"] = GET_BATTERY_VOLTAGE();
     doc["solar"] = GET_SOLAR_VOLTAGE();
 
@@ -89,5 +138,4 @@ void loop(){
     http.end();
 
   } while (httpResponseCode != 200);
-  delay(10000);
 }
